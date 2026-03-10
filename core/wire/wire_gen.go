@@ -9,9 +9,9 @@ package wire
 import (
 	"github.com/google/wire"
 	"gorm.io/gorm"
-	"ybg-backend-go/internal/delivery/http"
-	"ybg-backend-go/internal/repository"
-	"ybg-backend-go/internal/usecase"
+	"ybg-backend-go/core/delivery/http"
+	"ybg-backend-go/core/repository"
+	"ybg-backend-go/core/usecase"
 )
 
 // Injectors from wire.go:

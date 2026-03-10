@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"ybg-backend-go/internal/entity"
+	"ybg-backend-go/core/entity"
 
 	"gorm.io/gorm"
 )

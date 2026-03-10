@@ -3,8 +3,8 @@ package usecase
 import (
 	"errors"
 	"time"
-	"ybg-backend-go/internal/entity"
-	"ybg-backend-go/internal/repository"
+	"ybg-backend-go/core/entity"
+	"ybg-backend-go/core/repository"
 	"ybg-backend-go/pkg/utils"
 
 	"github.com/google/uuid"

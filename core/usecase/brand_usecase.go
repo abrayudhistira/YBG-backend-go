@@ -1,8 +1,8 @@
 package usecase
 
 import (
-	"ybg-backend-go/internal/entity"
-	"ybg-backend-go/internal/repository"
+	"ybg-backend-go/core/entity"
+	"ybg-backend-go/core/repository"
 )
 
 type BrandUsecase interface {

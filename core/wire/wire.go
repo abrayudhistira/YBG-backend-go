@@ -1,9 +1,12 @@
+//go:build wireinject
+// +build wireinject
+
 package wire
 
 import (
-	"ybg-backend-go/internal/delivery/http"
-	"ybg-backend-go/internal/repository"
-	"ybg-backend-go/internal/usecase"
+	"ybg-backend-go/core/delivery/http"
+	"ybg-backend-go/core/repository"
+	"ybg-backend-go/core/usecase"
 
 	"github.com/google/wire"
 	"gorm.io/gorm"

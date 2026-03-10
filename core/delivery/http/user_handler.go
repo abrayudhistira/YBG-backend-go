@@ -3,8 +3,8 @@ package http
 import (
 	"errors"
 	"net/http"
-	"ybg-backend-go/internal/entity"
-	"ybg-backend-go/internal/usecase"
+	"ybg-backend-go/core/entity"
+	"ybg-backend-go/core/usecase"
 	"ybg-backend-go/pkg/utils"
 
 	"github.com/gin-gonic/gin"

@@ -3,7 +3,7 @@
 	import (
 		"log"
 		"time"
-		"ybg-backend-go/internal/entity"
+		"ybg-backend-go/core/entity"
 		"ybg-backend-go/pkg/utils"
 
 		"github.com/google/uuid"
