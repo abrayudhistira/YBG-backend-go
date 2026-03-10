@@ -45,6 +45,9 @@ func init() {
 	r := gin.Default()
 
 	// --- Routes Setup ---
+	r.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/health")
+	})
 	r.POST("/register", userHandler.Create)
 	r.POST("/login", userHandler.Login)
 	r.GET("/health", func(c *gin.Context) {
@@ -71,7 +74,7 @@ func init() {
 
 		api.GET("/products", productHandler.GetAll)
 		api.GET("/products/:id", productHandler.GetByID)
-		
+
 		productAdmin := api.Group("/products")
 		productAdmin.Use(middleware.RoleMiddleware("admin"))
 		{
