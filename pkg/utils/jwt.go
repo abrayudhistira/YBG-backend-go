@@ -4,18 +4,17 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 )
 
-var jwtKey = []byte("yoursbeyoundglamour") // Ganti dengan secret di .env nanti
+var jwtKey = []byte("yoursbeyoundglamour") // Pastikan nanti ambil dari os.Getenv("JWT_SECRET")
 
 type Claims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Role   string    `json:"role"`
+	UserID string `json:"user_id"` // UBAH: dari uuid.UUID ke string
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID uuid.UUID, role string) (string, error) {
+func GenerateToken(userID string, role string) (string, error) { // UBAH: userID sekarang string
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
 		UserID: userID,

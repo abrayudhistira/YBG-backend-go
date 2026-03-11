@@ -11,16 +11,14 @@ import (
 	"ybg-backend-go/core/entity"
 	"ybg-backend-go/core/repository"
 	"ybg-backend-go/pkg/utils"
-
-	"github.com/google/uuid"
 )
 
 type UserUsecase interface {
 	RegisterUser(u *entity.User) error
 	FetchAllUsers() ([]entity.User, error)
-	GetUserProfile(id uuid.UUID) (entity.User, error)
+	GetUserProfile(id string) (entity.User, error)
 	UpdateProfile(u *entity.User, file io.Reader, fileName, contentType string) error
-	RemoveUser(id uuid.UUID) error
+	RemoveUser(id string) error
 	Login(email, password string) (entity.User, error)
 }
 
@@ -34,14 +32,13 @@ func NewUserUsecase(repo repository.UserRepository, pointRepo repository.PointRe
 }
 
 func (u *userUC) UpdateProfile(user *entity.User, file io.Reader, fileName, contentType string) error {
-	// 1. Logika Upload Gambar ke Supabase Storage (jika ada file)
 	if file != nil {
 		supabaseURL := os.Getenv("SUPABASE_URL")
 		supabaseKey := os.Getenv("SUPABASE_SERVICE_ROLE_KEY")
 		bucketName := "avatars"
 
-		// Path: user_id/filename.ext
-		remotePath := fmt.Sprintf("%s/%s", user.UserID.String(), fileName)
+		// PERBAIKAN: Karena UserID sudah string, hapus method .String()
+		remotePath := fmt.Sprintf("%s/%s", user.UserID, fileName)
 		uploadURL := fmt.Sprintf("%s/storage/v1/object/%s/%s", supabaseURL, bucketName, remotePath)
 
 		buf := new(bytes.Buffer)
@@ -50,12 +47,11 @@ func (u *userUC) UpdateProfile(user *entity.User, file io.Reader, fileName, cont
 		req, _ := http.NewRequest("POST", uploadURL, buf)
 		req.Header.Set("Authorization", "Bearer "+supabaseKey)
 		req.Header.Set("Content-Type", contentType)
-		req.Header.Set("x-upsert", "true") // Overwrite jika sudah ada
+		req.Header.Set("x-upsert", "true")
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err == nil && (resp.StatusCode == http.StatusOK || resp.StatusCode == 201) {
-			// Construct Public URL
 			user.ProfilePicture = fmt.Sprintf("%s/storage/v1/object/public/%s/%s", supabaseURL, bucketName, remotePath)
 		}
 		if resp != nil {
@@ -63,28 +59,41 @@ func (u *userUC) UpdateProfile(user *entity.User, file io.Reader, fileName, cont
 		}
 	}
 
-	// 2. Update database
 	return u.repo.Update(user)
 }
 
-// ... Implementasi RegisterUser, Login, dll tetap sama seperti sebelumnya ...
 func (u *userUC) RegisterUser(user *entity.User) error {
-	if user.UserID == uuid.Nil {
-		user.UserID = uuid.New()
+	// PERBAIKAN: Pastikan fungsi di utils sudah sesuai namanya
+	if user.UserID == "" {
+		user.UserID = utils.GenerateRandomID(8) // Pastikan nama ini sama dengan di pkg/utils
 	}
+
 	hashed, _ := utils.HashPassword(user.Password)
 	user.Password = hashed
+
 	if err := u.repo.Create(user); err != nil {
 		return err
 	}
+
 	return u.pointRepo.CreatePointTotal(&entity.PointTotal{
 		UserID: user.UserID, Total: 0, Tier: "friend", CreatedAt: time.Now(),
 	})
 }
 
-func (u *userUC) FetchAllUsers() ([]entity.User, error)            { return u.repo.GetAll() }
-func (u *userUC) GetUserProfile(id uuid.UUID) (entity.User, error) { return u.repo.GetByID(id) }
-func (u *userUC) RemoveUser(id uuid.UUID) error                    { return u.repo.Delete(id) }
+func (u *userUC) FetchAllUsers() ([]entity.User, error) {
+	return u.repo.GetAll()
+}
+
+// PERBAIKAN: Error "cannot use id as uuid.UUID" berarti REPOSITORY Anda masih pakai UUID.
+// Anda HARUS mengubah interface UserRepository.GetByID agar menerima string.
+func (u *userUC) GetUserProfile(id string) (entity.User, error) {
+	return u.repo.GetByID(id)
+}
+
+func (u *userUC) RemoveUser(id string) error {
+	return u.repo.Delete(id)
+}
+
 func (u *userUC) Login(email, password string) (entity.User, error) {
 	user, err := u.repo.GetByEmail(email)
 	if err != nil || !utils.CheckPasswordHash(password, user.Password) {

@@ -3,16 +3,15 @@ package repository
 import (
 	"ybg-backend-go/core/entity"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type UserRepository interface {
 	Create(u *entity.User) error
 	GetAll() ([]entity.User, error)
-	GetByID(id uuid.UUID) (entity.User, error)
+	GetByID(id string) (entity.User, error) // Ganti ke string
 	Update(u *entity.User) error
-	Delete(id uuid.UUID) error
+	Delete(id string) error // Ganti ke string
 	GetByEmail(email string) (entity.User, error)
 }
 
@@ -34,8 +33,9 @@ func (r *userRepo) GetAll() ([]entity.User, error) {
 	return users, err
 }
 
-func (r *userRepo) GetByID(id uuid.UUID) (entity.User, error) {
+func (r *userRepo) GetByID(id string) (entity.User, error) {
 	var user entity.User
+	// GORM akan otomatis menangani string ID di sini
 	err := r.db.Preload("PointTotal").Preload("PointHistory").First(&user, "user_id = ?", id).Error
 	return user, err
 }
@@ -47,13 +47,12 @@ func (r *userRepo) GetByEmail(email string) (entity.User, error) {
 }
 
 func (r *userRepo) Update(u *entity.User) error {
-	// Omit field yang tidak boleh diubah sembarangan via profile update
 	return r.db.Model(u).
 		Where("user_id = ?", u.UserID).
 		Omit("PointTotal", "PointHistory", "Password", "Role").
 		Updates(u).Error
 }
 
-func (r *userRepo) Delete(id uuid.UUID) error {
+func (r *userRepo) Delete(id string) error {
 	return r.db.Delete(&entity.User{}, "user_id = ?", id).Error
 }

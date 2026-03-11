@@ -9,7 +9,6 @@ import (
 	"ybg-backend-go/pkg/utils"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -60,11 +59,7 @@ func (h *UserHandler) GetAll(c *gin.Context) {
 }
 
 func (h *UserHandler) GetByID(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid UUID format"})
-		return
-	}
+	id := c.Param("id") // String ID (bisa UUID string atau Y001)
 
 	user, err := h.uc.GetUserProfile(id)
 	if err != nil {
@@ -78,32 +73,8 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": user})
 }
 
-// func (h *UserHandler) Update(c *gin.Context) {
-// 	id, err := uuid.Parse(c.Param("id"))
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid UUID format"})
-// 		return
-// 	}
-
-// 	var u entity.User
-// 	if err := c.ShouldBindJSON(&u); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-// 		return
-// 	}
-// 	u.UserID = id
-
-//		if err := h.uc.UpdateProfile(&u); err != nil {
-//			c.JSON(http.StatusInternalServerError, gin.H{"error": "Update failed"})
-//			return
-//		}
-//		c.JSON(http.StatusOK, gin.H{"message": "User updated", "data": u})
-//	}
 func (h *UserHandler) Update(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid UUID format"})
-		return
-	}
+	id := c.Param("id") 
 
 	// 1. Binding Data Teks dari Form
 	var u entity.User
@@ -123,8 +94,13 @@ func (h *UserHandler) Update(c *gin.Context) {
 			return
 		}
 
-		openedFile, _ := file.Open()
+		openedFile, errFile := file.Open()
+		if errFile != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open image"})
+			return
+		}
 		defer openedFile.Close()
+		
 		imageStream = openedFile
 		fileName = file.Filename
 		contentType = file.Header.Get("Content-Type")
@@ -148,11 +124,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 }
 
 func (h *UserHandler) Delete(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid UUID format"})
-		return
-	}
+	id := c.Param("id") 
 
 	if err := h.uc.RemoveUser(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Delete failed"})
@@ -176,18 +148,17 @@ func (h *UserHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		return
 	}
+
 	token, err := utils.GenerateToken(user.UserID, user.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	// TODO: Generate JWT token here and return it
-	// c.JSON(http.StatusOK, gin.H{"message": "Login successful", "user": user})
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
 		"token":   token,
-		"user": gin.H{ // Kita bentuk ulang objek user-nya di sini
+		"user": gin.H{
 			"user_id": user.UserID,
 			"name":    user.Name,
 			"email":   user.Email,

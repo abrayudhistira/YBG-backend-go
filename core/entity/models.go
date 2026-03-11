@@ -2,14 +2,12 @@ package entity
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // --- USER & LOYALTY ENTITIES ---
 
 type User struct {
-	UserID         uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
+	UserID         string     `gorm:"primaryKey" json:"user_id"`
 	Name           string     `gorm:"size:50;not null" json:"name"`
 	Email          string     `gorm:"size:50;unique;not null" json:"email"`
 	Password       string     `gorm:"not null" json:"password,omitempty"`
@@ -28,7 +26,7 @@ func (User) TableName() string { return "users" } // Tabel Users biasanya jamak 
 
 type PointTotal struct {
 	TotalPointID uint      `gorm:"primaryKey" json:"total_point_id"`
-	UserID       uuid.UUID `gorm:"type:uuid;uniqueIndex" json:"user_id"`
+	UserID       string    `gorm:"uniqueIndex" json:"user_id"`
 	Total        int       `gorm:"default:0" json:"total"`
 	Tier         string    `gorm:"type:point_tier;default:friend" json:"tier"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -39,7 +37,7 @@ func (PointTotal) TableName() string { return "point_total" }
 
 type PointHistory struct {
 	PointID   uint      `gorm:"primaryKey" json:"point_id"`
-	UserID    uuid.UUID `gorm:"type:uuid" json:"user_id"`
+	UserID    string    `json:"user_id"`
 	Point     int       `gorm:"not null" json:"point"`
 	CreatedAt time.Time `json:"created_at"`
 }

@@ -5,7 +5,6 @@ import (
 	"ybg-backend-go/core/usecase"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 type PointHandler struct {
@@ -14,18 +13,6 @@ type PointHandler struct {
 
 func NewPointHandler(uc usecase.PointUsecase) *PointHandler { return &PointHandler{uc: uc} }
 
-// func (h *PointHandler) GetHistory(c *gin.Context) {
-// 	// Ambil userID dari middleware Auth (pastikan di middleware kamu Set("user_id", ...))
-// 	uidObj, _ := c.Get("user_id")
-// 	uid := uidObj.(uuid.UUID)
-
-//		res, err := h.uc.GetMyPointHistory(uid)
-//		if err != nil {
-//			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal ambil history"})
-//			return
-//		}
-//		c.JSON(http.StatusOK, gin.H{"data": res})
-//	}
 func (h *PointHandler) GetHistory(c *gin.Context) {
 	// 1. Ambil userID dari middleware Auth
 	uidObj, exists := c.Get("user_id")
@@ -34,14 +21,13 @@ func (h *PointHandler) GetHistory(c *gin.Context) {
 		return
 	}
 
-	// Pastikan casting tipe data sesuai (uuid.UUID)
-	uid, ok := uidObj.(uuid.UUID)
+	// PERBAIKAN: Casting ke string, bukan uuid.UUID
+	uid, ok := uidObj.(string)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format in context"})
 		return
 	}
 
-	// 2. Panggil Usecase dengan filter UID
 	res, err := h.uc.GetMyPointHistory(uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal ambil history"})
@@ -50,10 +36,11 @@ func (h *PointHandler) GetHistory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": res})
 }
+
 func (h *PointHandler) CreatePoint(c *gin.Context) {
 	var req struct {
-		UserID uuid.UUID `json:"user_id" binding:"required"`
-		Point  int       `json:"point" binding:"required"`
+		UserID string `json:"user_id" binding:"required"` // Pindah ke string
+		Point  int    `json:"point" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -66,6 +53,7 @@ func (h *PointHandler) CreatePoint(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Point updated successfully"})
 }
+
 func (h *PointHandler) GetAllSummaries(c *gin.Context) {
 	totals, err := h.uc.FetchAllUsersPoints()
 	if err != nil {
@@ -73,11 +61,10 @@ func (h *PointHandler) GetAllSummaries(c *gin.Context) {
 		return
 	}
 
-	// Kita buat slice baru untuk format response sesuai mau kamu
 	type pointResponse struct {
-		UserID uuid.UUID `json:"user_id"`
-		Name   string    `json:"name"`
-		Point  int       `json:"point"`
+		UserID string `json:"user_id"` // Pindah ke string
+		Name   string `json:"name"`
+		Point  int    `json:"point"`
 	}
 
 	var response []pointResponse

@@ -3,13 +3,11 @@ package usecase
 import (
 	"ybg-backend-go/core/entity"
 	"ybg-backend-go/core/repository"
-
-	"github.com/google/uuid"
 )
 
 type PointUsecase interface {
-	AddPointTransaction(uid uuid.UUID, point int) error
-	GetMyPointHistory(uid uuid.UUID) ([]entity.PointHistory, error)
+	AddPointTransaction(uid string, point int) error
+	GetMyPointHistory(uid string) ([]entity.PointHistory, error)
 	FetchAllUsersPoints() ([]entity.PointTotal, error)
 }
 
@@ -19,8 +17,7 @@ type pointUC struct {
 
 func NewPointUsecase(repo repository.PointRepository) PointUsecase { return &pointUC{repo: repo} }
 
-func (u *pointUC) AddPointTransaction(uid uuid.UUID, point int) error {
-	// 1. Simpan ke history (PointID auto-increment)
+func (u *pointUC) AddPointTransaction(uid string, point int) error {
 	history := entity.PointHistory{
 		UserID: uid,
 		Point:  point,
@@ -28,12 +25,10 @@ func (u *pointUC) AddPointTransaction(uid uuid.UUID, point int) error {
 	if err := u.repo.CreateHistory(&history); err != nil {
 		return err
 	}
-
-	// 2. Update Total di point_total
 	return u.repo.UpdateTotal(uid, point)
 }
 
-func (u *pointUC) GetMyPointHistory(uid uuid.UUID) ([]entity.PointHistory, error) {
+func (u *pointUC) GetMyPointHistory(uid string) ([]entity.PointHistory, error) {
 	return u.repo.GetHistoryByUserID(uid)
 }
 
