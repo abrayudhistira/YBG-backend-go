@@ -9,14 +9,15 @@ import (
 // --- USER & LOYALTY ENTITIES ---
 
 type User struct {
-	UserID   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
-	Name     string     `gorm:"size:50;not null" json:"name"`
-	Email    string     `gorm:"size:50;unique;not null" json:"email"`
-	Password string     `gorm:"not null" json:"password,omitempty"`
-	Birth    *time.Time `json:"birth"`
-	Role     string     `gorm:"type:user_role;default:customer" json:"role"`
-	Phone    string     `gorm:"size:13" json:"phone"`
-	Gender   string     `gorm:"type:user_gender" json:"gender"`
+	UserID         uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
+	Name           string     `gorm:"size:50;not null" json:"name"`
+	Email          string     `gorm:"size:50;unique;not null" json:"email"`
+	Password       string     `gorm:"not null" json:"password,omitempty"`
+	ProfilePicture string     `json:"profile_picture"`
+	Birth          *time.Time `json:"birth"`
+	Role           string     `gorm:"type:user_role;default:customer" json:"role"`
+	Phone          string     `gorm:"size:13" json:"phone"`
+	Gender         string     `gorm:"type:user_gender" json:"gender"`
 	// IdPoint      int            `json:"id_point"`
 	CreatedAt    time.Time      `json:"created_at"`
 	PointTotal   *PointTotal    `gorm:"foreignKey:UserID" json:"point_total"`

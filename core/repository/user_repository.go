@@ -19,11 +19,7 @@ type UserRepository interface {
 type userRepo struct {
 	db *gorm.DB
 }
-func (r *userRepo) GetByEmail(email string) (entity.User, error) {
-    var user entity.User
-    err := r.db.Where("email = ?", email).First(&user).Error
-    return user, err
-}
+
 func NewUserRepository(db *gorm.DB) UserRepository {
 	return &userRepo{db: db}
 }
@@ -34,21 +30,28 @@ func (r *userRepo) Create(u *entity.User) error {
 
 func (r *userRepo) GetAll() ([]entity.User, error) {
 	var users []entity.User
-	// Kita ikut sertakan PointTotal agar di list user terlihat poinnnya
 	err := r.db.Preload("PointTotal").Find(&users).Error
 	return users, err
 }
 
 func (r *userRepo) GetByID(id uuid.UUID) (entity.User, error) {
 	var user entity.User
-	// Preload PointTotal dan History untuk detail profil
 	err := r.db.Preload("PointTotal").Preload("PointHistory").First(&user, "user_id = ?", id).Error
 	return user, err
 }
 
+func (r *userRepo) GetByEmail(email string) (entity.User, error) {
+	var user entity.User
+	err := r.db.Where("email = ?", email).First(&user).Error
+	return user, err
+}
+
 func (r *userRepo) Update(u *entity.User) error {
-	// Omit PointTotal agar update user tidak menimpa data poin secara tidak sengaja
-	return r.db.Model(u).Omit("PointTotal", "PointHistory").Updates(u).Error
+	// Omit field yang tidak boleh diubah sembarangan via profile update
+	return r.db.Model(u).
+		Where("user_id = ?", u.UserID).
+		Omit("PointTotal", "PointHistory", "Password", "Role").
+		Updates(u).Error
 }
 
 func (r *userRepo) Delete(id uuid.UUID) error {

@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"ybg-backend-go/core/entity"
 	"ybg-backend-go/core/usecase"
@@ -77,6 +78,26 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": user})
 }
 
+// func (h *UserHandler) Update(c *gin.Context) {
+// 	id, err := uuid.Parse(c.Param("id"))
+// 	if err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid UUID format"})
+// 		return
+// 	}
+
+// 	var u entity.User
+// 	if err := c.ShouldBindJSON(&u); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
+// 	u.UserID = id
+
+//		if err := h.uc.UpdateProfile(&u); err != nil {
+//			c.JSON(http.StatusInternalServerError, gin.H{"error": "Update failed"})
+//			return
+//		}
+//		c.JSON(http.StatusOK, gin.H{"message": "User updated", "data": u})
+//	}
 func (h *UserHandler) Update(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -84,18 +105,46 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
+	// 1. Binding Data Teks dari Form
 	var u entity.User
-	if err := c.ShouldBindJSON(&u); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
 	u.UserID = id
+	u.Name = c.PostForm("name")
+	u.Email = c.PostForm("email")
 
-	if err := h.uc.UpdateProfile(&u); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Update failed"})
+	// 2. Handling File Gambar
+	var imageStream io.Reader
+	var fileName, contentType string
+
+	file, err := c.FormFile("image")
+	if err == nil {
+		// Validasi size 5MB
+		if file.Size > 5*1024*1024 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Image too large (max 5MB)"})
+			return
+		}
+
+		openedFile, _ := file.Open()
+		defer openedFile.Close()
+		imageStream = openedFile
+		fileName = file.Filename
+		contentType = file.Header.Get("Content-Type")
+	}
+
+	// 3. Eksekusi Update
+	if err := h.uc.UpdateProfile(&u, imageStream, fileName, contentType); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "User updated", "data": u})
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Profile updated successfully",
+		"data": gin.H{
+			"user_id":         u.UserID,
+			"name":            u.Name,
+			"email":           u.Email,
+			"profile_picture": u.ProfilePicture,
+		},
+	})
 }
 
 func (h *UserHandler) Delete(c *gin.Context) {
