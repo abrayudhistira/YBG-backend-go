@@ -63,9 +63,25 @@ func (u *userUC) UpdateProfile(user *entity.User, file io.Reader, fileName, cont
 }
 
 func (u *userUC) RegisterUser(user *entity.User) error {
-	existingUser, _ := u.repo.GetByEmail(user.Email)
-	if existingUser.Email != "" {
-		return errors.New("duplicate: email already exists")
+	if user.UserID != "" {
+		existingID, _ := u.repo.GetByID(user.UserID)
+		if existingID.UserID != "" {
+			return errors.New("conflict: id already exists")
+		}
+	} else {
+		user.UserID = utils.GenerateRandomID(8)
+	}
+
+	// 2. Cek duplikasi Email
+	existingEmail, _ := u.repo.GetByEmail(user.Email)
+	if existingEmail.Email != "" {
+		return errors.New("conflict: email already exists")
+	}
+
+	// 3. Cek duplikasi Nama
+	existingName, _ := u.repo.GetByName(user.Name) // Pastikan fungsi ini ada di Repo
+	if existingName.Name != "" {
+		return errors.New("conflict: name already exists")
 	}
 	// PERBAIKAN: Pastikan fungsi di utils sudah sesuai namanya
 	if user.UserID == "" {

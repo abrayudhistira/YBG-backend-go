@@ -63,13 +63,28 @@ func (h *UserHandler) Create(c *gin.Context) {
 	}
 
 	// 4. Eksekusi ke Usecase
+	// if err := h.uc.RegisterUser(&u); err != nil {
+	// 	// Cek jika error karena duplikasi email (asumsi usecase/repo mengembalikan error spesifik)
+	// 	if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+	// 		c.JSON(http.StatusConflict, gin.H{"error": "Email sudah terdaftar"})
+	// 		return
+	// 	}
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal registrasi user"})
+	// 	return
+	// }
 	if err := h.uc.RegisterUser(&u); err != nil {
-		// Cek jika error karena duplikasi email (asumsi usecase/repo mengembalikan error spesifik)
-		if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+		errStr := strings.ToLower(err.Error())
+
+		switch {
+		case strings.Contains(errStr, "id already exists"):
+			c.JSON(http.StatusConflict, gin.H{"error": "ID sudah terdaftar"})
+		case strings.Contains(errStr, "email already exists"):
 			c.JSON(http.StatusConflict, gin.H{"error": "Email sudah terdaftar"})
-			return
+		case strings.Contains(errStr, "name already exists"):
+			c.JSON(http.StatusConflict, gin.H{"error": "Nama sudah terdaftar"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal registrasi user"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal registrasi user"})
 		return
 	}
 

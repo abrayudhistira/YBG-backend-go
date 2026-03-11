@@ -13,6 +13,7 @@ type UserRepository interface {
 	Update(u *entity.User) error
 	Delete(id string) error // Ganti ke string
 	GetByEmail(email string) (entity.User, error)
+	GetByName(name string) (entity.User, error)
 }
 
 type userRepo struct {
@@ -45,7 +46,11 @@ func (r *userRepo) GetByEmail(email string) (entity.User, error) {
 	err := r.db.Where("email = ?", email).First(&user).Error
 	return user, err
 }
-
+func (r *userRepo) GetByName(name string) (entity.User, error) {
+	var u entity.User
+	err := r.db.Where("name = ?", name).First(&u).Error
+	return u, err
+}
 func (r *userRepo) Update(u *entity.User) error {
 	return r.db.Model(u).
 		Where("user_id = ?", u.UserID).
