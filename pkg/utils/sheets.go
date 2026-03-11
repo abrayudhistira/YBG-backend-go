@@ -2,29 +2,30 @@ package utils
 
 import (
 	"context"
-	"encoding/base64"
-	"strings" // Tambahkan ini
+	"io"
+	"net/http"
 
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 )
 
 func GetSheetsService(ctx context.Context) (*sheets.Service, error) {
-	// 1. String Base64 (Pastikan tidak ada tanda petik di tengah string)
-	credsBase64 := `eyJ0eXBlIjoic2VydmljZV9hY2NvdW50IiwicHJvamVjdF9pZCI6ImRpZ2l3YXN0ZS00NTkzMTgiLCJwcml2YXRlX2tleV9pZCI6IjQyNzNiYzhmNDU4NDkwNDA3MDhhZjU1NjAxMDE2MGJjZjY4ZTlmNTQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuTUlJRXZBSUJBREFOQmdrcWhraUc5dzBCQVFFRkFBU0NCS1l3Z2dTaUFnRUFAb0lCQVFEVjlKcnVrZldoc2pwK1xuTWM3dGVERW5MUE9JVkc0Q3VOQnVrQlJ6ZkZXYUNLejdCVTRsSXl6WWFZRzFQVURYcmxZdUN6M3ZxNGY1VGJBNVxuN3BvTjJkNmtodHBXMmhxdWFUSEtGN05rVzJGRmp1OGl3UHhJZ1NwaFZGbnZaYmJ5VEp0MkwvTlJOaldhdHFFWlxuZkVycURzYTBUnRQS0xoRm5zZU1odTNmZzZnVlZ4NGU3dlpML1FzNU1vcFZMYkRpRGtVODVNdDY2ejZjaTdyTVxuU0lXS2luaFJUYm52dFlpQyswR0JaaTUvVnpIR0FkWVVLYkFhSHNUMlR1R0h3UXJVWHZpQzZHRkZsYzNkbDBOXG5sS2JScnFPVTo0S0xJT2R6Yzc3MkNHTmUvNFkrV2hrR0dIVGt5eHBhZG96T1dUM2E5N3JvOWVqSVJPUU53VnYwXG5jVFNyR1FiTkFnTUJBQUVDZ2dFQVZjZkZyRHZaMnZQdHJyWENqSVFDUEx0WW5DdDVsZDdLTm1IT3lVU0N2NGlWXG43ZWlCSmJPZUljQWZVRzQrWGJyWWM0cHZVUjJaSFJPUVpHSFBzeGowRGt1TTA0Q0xiUHpoQ1BENnJCUlZDZ0hXXG5ENzJISEN5ODVKdmdtUEt6b1hha1o3eXUxWk1oNTc4c0ZOODMyK0tEdVRaWUUyNkM3T3V0c0ZNTXExQzMzQVlcbmhISlRiU3ZyYjNFcFowbWsrdlIzZTZDWkpGRENYVTI6ZlAxZUF6ajlJU0MvM0YzVHVZRGcyQjlBMTVocnNiK2dcbmhNbFpaYm5mS0E0cmJ0TmN4VFRNSVZ0azZIK1RBOVpXZDFYd0Mre3pxUXp3M09nRHNZZ1VNSzFSczhnMFVhTlc5XG41YWVmQ0JhYlVsdlIwbTlMdVBzMTJUR2t5SVpIMkd0UU9LSHV6SGVVVXdLQmdRRHRqUExyQWE3SDdYd2t5WU5GXG5SVEZMeVdvVmxyTW5HWW1aR0FTZWZ5SllDYkhvY1I1SnI4eUpyN3JubitrcCtrZkN4empobFFIZzhTMDAvQkVFMVxuS3NacmNRcUpLNkRURll1TC83WG44VitNVUNYT2hBWVNTMzdMbzFKMmdBMWxCcG5sUFRXU0xES0lteXFMektvNk1cbmRES29lWGZkeG0zWGRKc1pJdk1LcUpvVlJ3S0JnUURta29nY0NKSmVvL3hhdUVodHFhUTdkcHNrWGdRclM2VEFcc1N4YjFqNlg3bXhXR3F6a3JpVFBuSGpHV0g5TjM4cmVld3FtcXptWGNnSj9kbFVQRit4K2p1bVFva0ZZZmlkXG5VeDA0UHdPMkRDNXNBekFQNUlEUXh0MlZndFRabm93d3MyT1h1VFNUVmRINFpQV1JyVnBmeHBXWXdwYWhIR0xlXG55WC9wVnZkU1dLQmdCMkJRRHJJUHJrK1dnaEhybkpRSWN0VC9RVXBidDhRb1BLTzlTUHFqbzE0eHN3a0lLcnVcVmUxVEVsZnFtbUhYeHBpUEVKT2k0OHc1WGg1WTdQQjVtNk9FcXRadUxQL0hSSUtkTUdXVFZQVU1KM3g3LzhkdVxuV1g1cHlobzB5VlpJRkJFeGY2ZDFyajQ3dENtd3g1VFdhZVJiRWZSTnpSN1JzT0h5WVZXVmttM0pBb0dBRHdzNFxuZmp2QThSUFovMEZPMkhqZEVsUW13elN2S09OT21KUDJ4UGN4bGxBa0dXb2NKYitHLzFUQ1BJN0JuNThlYVcyMVxuMllISEdYQzlBSW5qaUM5NHBQdkNpdTh4VGpGcGNFa2U5L0ZHQU9IeUsrdGttT0tNOEZHTWxTZ0FEU3orRjJaZWFcd3crZDltOWF4OUtlVVhZOGMw dE5yMjNpemhoQUN6RXllMU1GT0FrQ2dZQVgyUEV5cDNjVG9OWUVVNjZGcjhic1xuZFdQd0xvVTVQUERMK2FqYzA2Y1FkcWJBQk5pY2pXWG1YeEFoS0tkc0RXb0doN3IxOWFzanFzellRNlVkUEE4ZFxuWTVwcy9iWGwxS0JYM3ZPQnV6ZUxnaTlEVmdXcUVqTmIyQkR3d1pJVnNEYzJ6RVZmc3NkcU83b0cwV2tNTEhnS1xu dGpHbCtnTXlvUE1CYWRsajROUC8vZz09IiwibmxpZW50X2VtYWlsIjoic3ByZWFkc2hlZXQtd29ya2VyQGRpZ2l3YXN0ZS00NTkzMTguaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiIxMTY5NDgxMjAwNjYxNjE5Njk4OTciLCJhdXRoX3VyaSI6Imh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9v_2YHHGXC9AInjiC94PvCIu8xTjFpcEke9/FGAOHyK+tkmOKM8FGMlSgADSz+F2Zea+o223izhhACzEye1MFOAkCgYAX2PEyp3cToNYEU66Fr8bsdWPwLoT59PBDL+ajc0cQDqbABNicjWXmXxAhKdsDWoGh7r19asjqszZQ6/UdPA8dY5ps/bXl1KBX2vOBuzeLgi9DVgWqEjNb2BDwwZIVsDc2zEVfssdqO7oG0WkMLHgKtjGl+gMyoPMBadlj4NP//g==\n-----END PRIVATE KEY-----\n", "client_email": "spreadsheet-worker@digiwaste-459318.iam.gserviceaccount.com", "client_id": "116948120066161969897", "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/spreadsheet-worker%40digiwaste-459318.iam.gserviceaccount.com", "universe_domain": "googleapis.com"}`
+	// URL Public Supabase kamu
+	fileURL := "https://jmdmommnfxkcyauelsus.supabase.co/storage/v1/object/public/private_assets/service-account.json"
 
-	// 2. MEMBERSIHKAN STRING (PENTING!)
-	// Kita hapus spasi, enter fisik (\n), dan tab yang mungkin terselip saat copy-paste
-	credsBase64 = strings.ReplaceAll(credsBase64, " ", "")
-	credsBase64 = strings.ReplaceAll(credsBase64, "\n", "")
-	credsBase64 = strings.ReplaceAll(credsBase64, "\r", "")
-	credsBase64 = strings.ReplaceAll(credsBase64, "\t", "")
+	// 1. Ambil file JSON secara langsung via HTTP
+	resp, err := http.Get(fileURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-	// 3. Decode
-	credsJSON, err := base64.StdEncoding.DecodeString(credsBase64)
+	// 2. Baca seluruh isi body-nya (Raw Bytes)
+	credsJSON, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
+	// 3. Masukkan ke Google Sheets Service
 	return sheets.NewService(ctx, option.WithCredentialsJSON(credsJSON))
 }
