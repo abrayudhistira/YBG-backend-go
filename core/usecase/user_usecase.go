@@ -130,13 +130,15 @@ func (u *userUC) SyncWithSpreadsheet() error {
 	ctx := context.Background()
 	spreadsheetID := os.Getenv("SPREADSHEET_ID")
 	rangeName := os.Getenv("SHEET_RANGE")
-	credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	// credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	// srv, err := utils.GetSheetsService(ctx)
 
-	if spreadsheetID == "" || credsPath == "" {
-		return errors.New("konfigurasi spreadsheet di .env belum lengkap")
+	if spreadsheetID == "" {
+		return errors.New("konfigurasi SPREADSHEET_ID di .env belum lengkap")
 	}
 
-	srv, err := utils.GetSheetsService(ctx, credsPath)
+	// 2. Panggil service (Cukup sekali saja)
+	srv, err := utils.GetSheetsService(ctx)
 	if err != nil {
 		return err
 	}
