@@ -59,6 +59,7 @@ func init() {
 	{
 		// Groups & Handlers
 		brandAdmin := api.Group("/brand")
+		api.GET("/brand", brandHandler.GetAll)
 		brandAdmin.Use(middleware.RoleMiddleware("admin"))
 		{
 			brandAdmin.POST("/", brandHandler.Create)
