@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"ybg-backend-go/core/entity"
@@ -19,118 +20,126 @@ func NewProductHandler(uc usecase.ProductUsecase) *ProductHandler {
 	return &ProductHandler{uc: uc}
 }
 
-func (h *ProductHandler) RegisterRoutes(r *gin.Engine) {
-	routes := r.Group("/products")
-	{
-		routes.POST("/", h.Create)
-		routes.GET("/", h.GetAll)
-		routes.GET("/:id", h.GetByID)
-		routes.PUT("/:id", h.Update)
-		routes.DELETE("/:id", h.Delete)
+func (h *ProductHandler) parseProductForm(c *gin.Context) (*entity.Product, io.Reader, string, string, error) {
+	price, _ := strconv.ParseFloat(c.PostForm("price"), 64)
+	brandID, _ := strconv.Atoi(c.PostForm("brand_id"))
+	categoryID, _ := strconv.Atoi(c.PostForm("category_id"))
+	stock, _ := strconv.Atoi(c.PostForm("stock"))
+
+	p := &entity.Product{
+		Name:        c.PostForm("name"),
+		Price:       price,
+		BrandID:     uint(brandID),
+		CategoryID:  uint(categoryID),
+		Description: c.PostForm("description"),
+		Stock:       stock,
+		Condition:   c.PostForm("condition"),
+		Status:      c.PostForm("status"),
 	}
+
+	file, err := c.FormFile("image")
+	if err != nil {
+		// Gambar bersifat opsional
+		return p, nil, "", "", nil
+	}
+
+	// Validasi Ukuran: Gunakan pesan string manual agar kompatibel dengan semua versi Go
+	if file.Size > 5*1024*1024 {
+		return nil, nil, "", "", errors.New("file size exceeds 5MB limit")
+	}
+
+	openedFile, err := file.Open()
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+
+	return p, openedFile, file.Filename, file.Header.Get("Content-Type"), nil
 }
 
-// 1. GET ALL: Tambahkan validasi jika array kosong
+func (h *ProductHandler) Create(c *gin.Context) {
+	p, img, name, cType, err := h.parseProductForm(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Jika ada gambar, pastikan ditutup setelah usecase selesai
+	if img != nil {
+		if closer, ok := img.(io.Closer); ok {
+			defer closer.Close()
+		}
+	}
+
+	if err := h.uc.CreateProduct(p, img, name, cType); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create product", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"message": "Product created", "data": p})
+}
+
+func (h *ProductHandler) Update(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
+
+	p, img, name, cType, err := h.parseProductForm(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	p.ProductID = uint(id)
+
+	if img != nil {
+		if closer, ok := img.(io.Closer); ok {
+			defer closer.Close()
+		}
+	}
+
+	if err := h.uc.UpdateProduct(p, img, name, cType); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Update failed", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Product updated", "data": p})
+}
+
 func (h *ProductHandler) GetAll(c *gin.Context) {
 	products, err := h.uc.FetchProducts()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products"})
 		return
 	}
 
-	// Jika data kosong, return array kosong [] bukan null, atau beri pesan
 	if len(products) == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "No products found",
-			"data":    []entity.Product{},
-		})
+		c.JSON(http.StatusOK, gin.H{"message": "No products found", "data": []entity.Product{}})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Products retrieved successfully",
-		"count":   len(products),
-		"data":    products,
-	})
+	c.JSON(http.StatusOK, gin.H{"data": products})
 }
 
-// 2. GET BY ID: Cek apakah data benar-benar ada
 func (h *ProductHandler) GetByID(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format. ID must be a positive integer"})
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
 		return
 	}
 
 	product, err := h.uc.GetProductDetail(uint(id))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found", "id": id})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Product detail retrieved",
-		"data":    product,
-	})
+	c.JSON(http.StatusOK, gin.H{"data": product})
 }
 
-// 3. CREATE: Validasi field wajib
-func (h *ProductHandler) Create(c *gin.Context) {
-	var p entity.Product
-	if err := c.ShouldBindJSON(&p); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
-		return
-	}
-
-	// Validasi manual sederhana (bisa ditingkatkan dengan library validator)
-	if p.Name == "" || p.Price <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Name and Price are required and must be valid"})
-		return
-	}
-
-	if err := h.uc.CreateProduct(&p); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create product"})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Product created successfully",
-		"data":    p,
-	})
-}
-
-// 4. UPDATE: Cek keberadaan data sebelum update
-func (h *ProductHandler) Update(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
-		return
-	}
-
-	var p entity.Product
-	if err := c.ShouldBindJSON(&p); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	p.ProductID = uint(id)
-	if err := h.uc.UpdateProduct(&p); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Update failed", "details": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Product updated successfully",
-		"data":    p,
-	})
-}
-
-// 5. DELETE
 func (h *ProductHandler) Delete(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -139,11 +148,9 @@ func (h *ProductHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.uc.DeleteProduct(uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete product"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Delete failed"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Product with ID " + strconv.Itoa(id) + " has been deleted",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Product deleted successfully"})
 }

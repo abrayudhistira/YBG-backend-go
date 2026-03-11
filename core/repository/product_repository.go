@@ -39,11 +39,14 @@ func (r *productRepo) GetByID(id uint) (entity.Product, error) {
 	return product, err
 }
 
+//	func (r *productRepo) Update(p *entity.Product) error {
+//		// Save akan memperbarui semua kolom berdasarkan Primary Key
+//		return r.db.Save(p).Error
+//	}
 func (r *productRepo) Update(p *entity.Product) error {
-	// Save akan memperbarui semua kolom berdasarkan Primary Key
-	return r.db.Save(p).Error
+	// Menggunakan Updates agar hanya field yang dikirim saja yang diperbarui
+	return r.db.Model(p).Where("product_id = ?", p.ProductID).Updates(p).Error
 }
-
 func (r *productRepo) Delete(id uint) error {
 	return r.db.Delete(&entity.Product{}, id).Error
 }
