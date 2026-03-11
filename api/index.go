@@ -100,8 +100,8 @@ func init() {
 		}
 
 		api.GET("/users", middleware.RoleMiddleware("admin"), userHandler.GetAll)
-		api.GET("/profile", userHandler.GetByID)
-		api.PUT("/profile", userHandler.Update)
+		api.GET("/profile/:id", userHandler.GetByID)
+		api.PUT("/profile/:id", userHandler.Update)
 	}
 
 	router = r
