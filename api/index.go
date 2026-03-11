@@ -76,6 +76,7 @@ func init() {
 
 		api.GET("/products", productHandler.GetAll)
 		api.GET("/products/:id", productHandler.GetByID)
+		api.GET("/products/search", productHandler.Search)
 
 		productAdmin := api.Group("/products")
 		productAdmin.Use(middleware.RoleMiddleware("admin"))

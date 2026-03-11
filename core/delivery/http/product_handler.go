@@ -105,21 +105,55 @@ func (h *ProductHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Product updated", "data": p})
 }
 
+// func (h *ProductHandler) GetAll(c *gin.Context) {
+// 	products, err := h.uc.FetchProducts()
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products"})
+// 		return
+// 	}
+
+// 	if len(products) == 0 {
+// 		c.JSON(http.StatusOK, gin.H{"message": "No products found", "data": []entity.Product{}})
+// 		return
+// 	}
+
+//		c.JSON(http.StatusOK, gin.H{"data": products})
+//	}
 func (h *ProductHandler) GetAll(c *gin.Context) {
-	products, err := h.uc.FetchProducts()
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset := (page - 1) * limit
+
+	products, total, err := h.uc.FetchProducts("", limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products"})
 		return
 	}
 
-	if len(products) == 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "No products found", "data": []entity.Product{}})
+	c.JSON(http.StatusOK, gin.H{
+		"data": products,
+		"meta": gin.H{"total": total, "page": page, "has_more": int64(offset+limit) < total},
+	})
+}
+
+// SEARCH ENDPOINT
+func (h *ProductHandler) Search(c *gin.Context) {
+	query := c.Query("q")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset := (page - 1) * limit
+
+	products, total, err := h.uc.FetchProducts(query, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Search failed"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": products})
+	c.JSON(http.StatusOK, gin.H{
+		"data": products,
+		"meta": gin.H{"total": total, "page": page, "has_more": int64(offset+limit) < total},
+	})
 }
-
 func (h *ProductHandler) GetByID(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {

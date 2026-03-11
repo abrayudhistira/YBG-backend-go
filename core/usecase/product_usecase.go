@@ -13,7 +13,8 @@ import (
 
 type ProductUsecase interface {
 	CreateProduct(p *entity.Product, file io.Reader, fileName, contentType string) error
-	FetchProducts() ([]entity.Product, error)
+	// FetchProducts() ([]entity.Product, error)
+	FetchProducts(search string, limit, offset int) ([]entity.Product, int64, error)
 	GetProductDetail(id uint) (entity.Product, error)
 	UpdateProduct(p *entity.Product, file io.Reader, fileName, contentType string) error
 	DeleteProduct(id uint) error
@@ -78,6 +79,9 @@ func (u *productUC) UpdateProduct(p *entity.Product, file io.Reader, fileName, c
 	return u.repo.Update(p)
 }
 
-func (u *productUC) FetchProducts() ([]entity.Product, error)         { return u.repo.GetAll() }
+// func (u *productUC) FetchProducts() ([]entity.Product, error)         { return u.repo.GetAll() }
+func (u *productUC) FetchProducts(search string, limit, offset int) ([]entity.Product, int64, error) {
+	return u.repo.GetAll(search, limit, offset)
+}
 func (u *productUC) GetProductDetail(id uint) (entity.Product, error) { return u.repo.GetByID(id) }
 func (u *productUC) DeleteProduct(id uint) error                      { return u.repo.Delete(id) }

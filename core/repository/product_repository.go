@@ -8,7 +8,8 @@ import (
 
 type ProductRepository interface {
 	Create(p *entity.Product) error
-	GetAll() ([]entity.Product, error)
+	// GetAll() ([]entity.Product, error)
+	GetAll(search string, limit, offset int) ([]entity.Product, int64, error)
 	GetByID(id uint) (entity.Product, error)
 	Update(p *entity.Product) error
 	Delete(id uint) error
@@ -26,13 +27,33 @@ func (r *productRepo) Create(p *entity.Product) error {
 	return r.db.Create(p).Error
 }
 
-func (r *productRepo) GetAll() ([]entity.Product, error) {
+//	func (r *productRepo) GetAll() ([]entity.Product, error) {
+//		var products []entity.Product
+//		// Mengambil data produk beserta info Brand dan Category
+//		err := r.db.Preload("Brand").Preload("Category").Find(&products).Error
+//		return products, err
+//	}
+func (r *productRepo) GetAll(search string, limit, offset int) ([]entity.Product, int64, error) {
 	var products []entity.Product
-	// Mengambil data produk beserta info Brand dan Category
-	err := r.db.Preload("Brand").Preload("Category").Find(&products).Error
-	return products, err
-}
+	var total int64
 
+	query := r.db.Model(&entity.Product{})
+
+	if search != "" {
+		// Gunakan ILIKE untuk PostgreSQL agar case-insensitive
+		query = query.Where("name ILIKE ?", "%"+search+"%")
+	}
+
+	// Hitung total data sebelum di-limit (untuk meta data frontend)
+	query.Count(&total)
+
+	err := query.Preload("Brand").Preload("Category").
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).
+		Find(&products).Error
+
+	return products, total, err
+}
 func (r *productRepo) GetByID(id uint) (entity.Product, error) {
 	var product entity.Product
 	err := r.db.Preload("Brand").Preload("Category").First(&product, id).Error
