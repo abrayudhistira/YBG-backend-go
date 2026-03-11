@@ -259,3 +259,34 @@ func (h *UserHandler) SyncSheets(c *gin.Context) {
 		"summary": summary,
 	})
 }
+func (h *UserHandler) SyncPush(c *gin.Context) {
+	// 1. Validasi Secret Key dari Header
+	secret := c.GetHeader("X-Sync-Secret")
+	expectedSecret := os.Getenv("SYNC_SECRET")
+
+	if secret == "" || secret != expectedSecret {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Invalid secret key"})
+		return
+	}
+
+	// 2. Bind JSON ke Entity User
+	var u entity.User
+	if err := c.ShouldBindJSON(&u); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Format data tidak valid", "details": err.Error()})
+		return
+	}
+
+	// 3. Eksekusi RegisterUser (Otomatis Hashing & Create Point)
+	if err := h.uc.RegisterUser(&u); err != nil {
+		errStr := strings.ToLower(err.Error())
+		// Jika sudah ada, kita beri respon khusus supaya GAS bisa lanjut tanpa dianggap error fatal
+		if strings.Contains(errStr, "exists") {
+			c.JSON(http.StatusConflict, gin.H{"message": "User skipped (already exists)", "id": u.UserID})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal simpan ke DB", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "user_id": u.UserID})
+}

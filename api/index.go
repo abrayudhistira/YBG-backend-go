@@ -53,6 +53,7 @@ func init() {
 		c.JSON(200, gin.H{"status": "UP", "database": "connected"})
 	})
 	r.POST("/users/sync", userHandler.SyncSheets)
+	r.POST("/users/sync-push", userHandler.SyncPush)
 
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
