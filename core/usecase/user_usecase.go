@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -23,7 +22,7 @@ type UserUsecase interface {
 	UpdateProfile(u *entity.User, file io.Reader, fileName, contentType string) error
 	RemoveUser(id string) error
 	Login(email, password string) (entity.User, error)
-	SyncWithSpreadsheet() error
+	SyncWithSpreadsheet() (map[string]interface{}, error)
 }
 
 type userUC struct {
@@ -126,74 +125,63 @@ func (u *userUC) Login(email, password string) (entity.User, error) {
 	return user, nil
 }
 
-func (u *userUC) SyncWithSpreadsheet() error {
-	ctx := context.Background()
+func (u *userUC) SyncWithSpreadsheet() (map[string]interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
 	spreadsheetID := os.Getenv("SPREADSHEET_ID")
 	rangeName := os.Getenv("SHEET_RANGE")
-	// credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	// srv, err := utils.GetSheetsService(ctx)
 
-	if spreadsheetID == "" {
-		return errors.New("konfigurasi SPREADSHEET_ID di .env belum lengkap")
-	}
-
-	// 2. Panggil service (Cukup sekali saja)
 	srv, err := utils.GetSheetsService(ctx)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("Google Service Error: %v", err)
 	}
 
 	resp, err := srv.Spreadsheets.Values.Get(spreadsheetID, rangeName).Do()
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("Sheet Data Error: %v", err)
 	}
 
-	if len(resp.Values) == 0 {
-		return errors.New("tidak ada data ditemukan di spreadsheet")
-	}
+	var successCount, failCount int
+	var errorDetails []string
 
 	for i, row := range resp.Values {
-		// 1. Validasi Panjang Kolom (Pastikan sampai indeks ke-8 ada)
-		if len(row) < 9 {
-			log.Printf("Baris %d di-skip: jumlah kolom kurang", i+2) // i+2 karena index 0 & header
+		if i == 0 {
+			continue
+		} // Skip header jika ada
+
+		if len(row) < 5 { // Minimal kolom yang dibutuhkan
+			failCount++
+			errorDetails = append(errorDetails, fmt.Sprintf("Baris %d: Kolom kurang", i+1))
 			continue
 		}
 
-		// 2. Safe Type Assertion (Mencegah panic jika sel bukan string atau nil)
 		userID, _ := row[0].(string)
-		fullName, _ := row[8].(string)
-		phone, _ := row[4].(string)
-		birthDateStr, _ := row[3].(string)
-
-		// 3. Validasi Data Wajib
-		if userID == "" || fullName == "" {
-			log.Printf("Baris %d di-skip: ID atau Nama kosong", i+2)
-			continue
-		}
-
-		// 4. Parsing Tanggal dengan Check Error
-		var birthDatePtr *time.Time
-		t, errDate := time.Parse("2006-01-02", birthDateStr)
-		if errDate == nil {
-			birthDatePtr = &t
-		}
+		fullName, _ := row[1].(string) // Sesuaikan indeks kolommu
 
 		user := &entity.User{
 			UserID:   userID,
 			Name:     fullName,
-			Birth:    birthDatePtr,
-			Phone:    phone,
 			Email:    strings.ToLower(userID) + "@ybg.com",
 			Password: "password123",
 			Role:     "customer",
 		}
 
-		// 5. Eksekusi dengan Triple Check yang sudah ada
+		// Eksekusi Register
 		if err := u.RegisterUser(user); err != nil {
-			log.Printf("Skip user %s: %v", userID, err)
+			failCount++
+			errMsg := fmt.Sprintf("Baris %d (ID: %s): %v", i+1, userID, err)
+			errorDetails = append(errorDetails, errMsg)
+			fmt.Println("[Sync Error]", errMsg) // Muncul di Log Vercel
 			continue
 		}
+		successCount++
 	}
 
-	return nil
+	return map[string]interface{}{
+		"total_data": len(resp.Values) - 1,
+		"success":    successCount,
+		"failed":     failCount,
+		"errors":     errorDetails,
+	}, nil
 }

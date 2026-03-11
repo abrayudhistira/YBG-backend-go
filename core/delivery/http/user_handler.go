@@ -245,10 +245,17 @@ func (h *UserHandler) SyncSheets(c *gin.Context) {
 		return
 	}
 	// Cukup panggil tanpa parameter karena sudah dihandle ENV di level Usecase
-	if err := h.uc.SyncWithSpreadsheet(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	summary, err := h.uc.SyncWithSpreadsheet()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": err.Error(),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Sinkronisasi dari Spreadsheet berhasil dijalankan"})
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "completed",
+		"summary": summary,
+	})
 }
