@@ -11,7 +11,7 @@ import (
 
 func GetSheetsService(ctx context.Context) (*sheets.Service, error) {
 	// Ambil dari ENV Vercel
-	data := os.Getenv("GOOGLE_CREDS_BASE64")
+	data := os.Getenv("GOOGLE_CREDENTIALS_JSON")
 
 	credsJSON, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
