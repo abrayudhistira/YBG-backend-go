@@ -67,6 +67,7 @@ func init() {
 		}
 
 		categoryAdmin := api.Group("/category")
+		api.GET("/category", categoryHandler.GetAll)
 		categoryAdmin.Use(middleware.RoleMiddleware("admin"))
 		{
 			categoryAdmin.POST("/", categoryHandler.Create)
