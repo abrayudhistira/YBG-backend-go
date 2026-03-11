@@ -2,24 +2,18 @@ package utils
 
 import (
 	"context"
-	"io"
-	"net/http"
+	"encoding/base64"
+	"os"
 
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 )
 
 func GetSheetsService(ctx context.Context) (*sheets.Service, error) {
-	fileURL := "https://jmdmommnfxkcyauelsus.supabase.co/storage/v1/object/public/private_assets/service-account.json"
+	// Ambil dari ENV Vercel
+	data := os.Getenv("GOOGLE_CREDS_BASE64")
 
-	resp, err := http.Get(fileURL)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Baca murni tanpa diubah jadi string atau dimanipulasi
-	credsJSON, err := io.ReadAll(resp.Body)
+	credsJSON, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
 		return nil, err
 	}
