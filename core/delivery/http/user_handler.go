@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/mail"
+	"os"
 	"strings"
 	"ybg-backend-go/core/entity"
 	"ybg-backend-go/core/usecase"
@@ -233,4 +234,21 @@ func (h *UserHandler) Login(c *gin.Context) {
 			"role":    user.Role,
 		},
 	})
+}
+func (h *UserHandler) SyncSheets(c *gin.Context) {
+	secret := c.GetHeader("X-Sync-Secret")
+	expectedSecret := os.Getenv("SYNC_SECRET")
+
+	// 2. Validasi
+	if secret == "" || secret != expectedSecret {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Invalid secret key"})
+		return
+	}
+	// Cukup panggil tanpa parameter karena sudah dihandle ENV di level Usecase
+	if err := h.uc.SyncWithSpreadsheet(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Sinkronisasi dari Spreadsheet berhasil dijalankan"})
 }

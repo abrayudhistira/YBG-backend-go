@@ -2,11 +2,14 @@ package usecase
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 	"ybg-backend-go/core/entity"
 	"ybg-backend-go/core/repository"
@@ -20,6 +23,7 @@ type UserUsecase interface {
 	UpdateProfile(u *entity.User, file io.Reader, fileName, contentType string) error
 	RemoveUser(id string) error
 	Login(email, password string) (entity.User, error)
+	SyncWithSpreadsheet() error
 }
 
 type userUC struct {
@@ -120,4 +124,74 @@ func (u *userUC) Login(email, password string) (entity.User, error) {
 		return entity.User{}, errors.New("invalid credentials")
 	}
 	return user, nil
+}
+
+func (u *userUC) SyncWithSpreadsheet() error {
+	ctx := context.Background()
+	spreadsheetID := os.Getenv("SPREADSHEET_ID")
+	rangeName := os.Getenv("SHEET_RANGE")
+	credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
+	if spreadsheetID == "" || credsPath == "" {
+		return errors.New("konfigurasi spreadsheet di .env belum lengkap")
+	}
+
+	srv, err := utils.GetSheetsService(ctx, credsPath)
+	if err != nil {
+		return err
+	}
+
+	resp, err := srv.Spreadsheets.Values.Get(spreadsheetID, rangeName).Do()
+	if err != nil {
+		return err
+	}
+
+	if len(resp.Values) == 0 {
+		return errors.New("tidak ada data ditemukan di spreadsheet")
+	}
+
+	for i, row := range resp.Values {
+		// 1. Validasi Panjang Kolom (Pastikan sampai indeks ke-8 ada)
+		if len(row) < 9 {
+			log.Printf("Baris %d di-skip: jumlah kolom kurang", i+2) // i+2 karena index 0 & header
+			continue
+		}
+
+		// 2. Safe Type Assertion (Mencegah panic jika sel bukan string atau nil)
+		userID, _ := row[0].(string)
+		fullName, _ := row[8].(string)
+		phone, _ := row[4].(string)
+		birthDateStr, _ := row[3].(string)
+
+		// 3. Validasi Data Wajib
+		if userID == "" || fullName == "" {
+			log.Printf("Baris %d di-skip: ID atau Nama kosong", i+2)
+			continue
+		}
+
+		// 4. Parsing Tanggal dengan Check Error
+		var birthDatePtr *time.Time
+		t, errDate := time.Parse("2006-01-02", birthDateStr)
+		if errDate == nil {
+			birthDatePtr = &t
+		}
+
+		user := &entity.User{
+			UserID:   userID,
+			Name:     fullName,
+			Birth:    birthDatePtr,
+			Phone:    phone,
+			Email:    strings.ToLower(userID) + "@ybg.com",
+			Password: "password123",
+			Role:     "customer",
+		}
+
+		// 5. Eksekusi dengan Triple Check yang sudah ada
+		if err := u.RegisterUser(user); err != nil {
+			log.Printf("Skip user %s: %v", userID, err)
+			continue
+		}
+	}
+
+	return nil
 }

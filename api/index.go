@@ -53,6 +53,7 @@ func init() {
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "UP", "database": "connected"})
 	})
+	r.POST("/users/sync", userHandler.SyncSheets)
 
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
