@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/mail"
+	"strings"
 	"ybg-backend-go/core/entity"
 	"ybg-backend-go/core/usecase"
 	"ybg-backend-go/pkg/utils"
@@ -35,14 +37,51 @@ func (h *UserHandler) RegisterRoutes(r *gin.Engine) {
 func (h *UserHandler) Create(c *gin.Context) {
 	var u entity.User
 	if err := c.ShouldBindJSON(&u); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Format input salah", "details": err.Error()})
 		return
 	}
+
+	// 1. Sanitasi & Validasi Basic
+	u.Email = strings.TrimSpace(strings.ToLower(u.Email))
+	u.Name = strings.TrimSpace(u.Name)
+
+	if u.Email == "" || u.Password == "" || u.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nama, Email, dan Password wajib diisi"})
+		return
+	}
+
+	// 2. Validasi Format Email
+	if _, err := mail.ParseAddress(u.Email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Format email tidak valid"})
+		return
+	}
+
+	// 3. Validasi Panjang Password
+	if len(u.Password) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password minimal 6 karakter"})
+		return
+	}
+
+	// 4. Eksekusi ke Usecase
 	if err := h.uc.RegisterUser(&u); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
+		// Cek jika error karena duplikasi email (asumsi usecase/repo mengembalikan error spesifik)
+		if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Email sudah terdaftar"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal registrasi user"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"message": "User created", "data": u})
+
+	// Jangan kirim balik password di response
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "User berhasil dibuat",
+		"data": gin.H{
+			"user_id": u.UserID,
+			"name":    u.Name,
+			"email":   u.Email,
+		},
+	})
 }
 
 func (h *UserHandler) GetAll(c *gin.Context) {
@@ -74,46 +113,60 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 }
 
 func (h *UserHandler) Update(c *gin.Context) {
-	id := c.Param("id") 
+	id := c.Param("id")
 
-	// 1. Binding Data Teks dari Form
+	// 1. Ambil data dari form
+	name := strings.TrimSpace(c.PostForm("name"))
+	email := strings.TrimSpace(strings.ToLower(c.PostForm("email")))
+
+	if name == "" || email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nama dan Email tidak boleh kosong"})
+		return
+	}
+
+	// 2. Validasi Format Email
+	if _, err := mail.ParseAddress(email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Format email tidak valid"})
+		return
+	}
+
 	var u entity.User
 	u.UserID = id
-	u.Name = c.PostForm("name")
-	u.Email = c.PostForm("email")
+	u.Name = name
+	u.Email = email
 
-	// 2. Handling File Gambar
+	// 3. Handling File Gambar
 	var imageStream io.Reader
 	var fileName, contentType string
 
 	file, err := c.FormFile("image")
 	if err == nil {
-		// Validasi size 5MB
 		if file.Size > 5*1024*1024 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Image too large (max 5MB)"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Ukuran gambar maksimal 5MB"})
 			return
 		}
 
-		openedFile, errFile := file.Open()
-		if errFile != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open image"})
+		// Validasi tipe file (MIME type)
+		ext := strings.ToLower(file.Header.Get("Content-Type"))
+		if !strings.HasPrefix(ext, "image/") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "File harus berupa gambar (jpg/png)"})
 			return
 		}
+
+		openedFile, _ := file.Open()
 		defer openedFile.Close()
-		
 		imageStream = openedFile
 		fileName = file.Filename
 		contentType = file.Header.Get("Content-Type")
 	}
 
-	// 3. Eksekusi Update
 	if err := h.uc.UpdateProfile(&u, imageStream, fileName, contentType); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal update profil"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Profile updated successfully",
+		"message": "Profil berhasil diperbarui",
 		"data": gin.H{
 			"user_id":         u.UserID,
 			"name":            u.Name,
@@ -124,7 +177,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 }
 
 func (h *UserHandler) Delete(c *gin.Context) {
-	id := c.Param("id") 
+	id := c.Param("id")
 
 	if err := h.uc.RemoveUser(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Delete failed"})

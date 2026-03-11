@@ -63,6 +63,10 @@ func (u *userUC) UpdateProfile(user *entity.User, file io.Reader, fileName, cont
 }
 
 func (u *userUC) RegisterUser(user *entity.User) error {
+	existingUser, _ := u.repo.GetByEmail(user.Email)
+	if existingUser.Email != "" {
+		return errors.New("duplicate: email already exists")
+	}
 	// PERBAIKAN: Pastikan fungsi di utils sudah sesuai namanya
 	if user.UserID == "" {
 		user.UserID = utils.GenerateRandomID(8) // Pastikan nama ini sama dengan di pkg/utils

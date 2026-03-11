@@ -12,5 +12,5 @@ func GenerateRandomID(n int) string {
 	for i := range b {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
-	return "USR-" + string(b)
+	return "Y-" + string(b)
 }
