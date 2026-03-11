@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"ybg-backend-go/core/delivery/http/middleware"
-	"ybg-backend-go/core/repository"
 	"ybg-backend-go/core/wire" // Pastikan import path ini benar
 
 	"github.com/gin-gonic/gin"
@@ -31,7 +30,7 @@ func init() {
 	}
 
 	// Seed Admin jika diperlukan
-	repository.SeedAdmin(db)
+	// repository.SeedAdmin(db)
 
 	// Panggil Injector dari Wire
 	userHandler := wire.InitializeUserHandler(db)
