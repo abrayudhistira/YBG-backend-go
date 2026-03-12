@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/mail"
@@ -32,6 +33,8 @@ func (h *UserHandler) RegisterRoutes(r *gin.Engine) {
 		routes.PUT("/:id", h.Update)
 		routes.DELETE("/:id", h.Delete)
 		routes.POST("/login", h.Login)
+		routes.POST("/sync-push", h.SyncPush)
+		routes.POST("/sync-clean", h.SyncClean)
 	}
 }
 
@@ -259,34 +262,127 @@ func (h *UserHandler) SyncSheets(c *gin.Context) {
 		"summary": summary,
 	})
 }
+
+// func (h *UserHandler) SyncPush(c *gin.Context) {
+// 	// 1. Validasi Secret Key dari Header
+// 	secret := c.GetHeader("X-Sync-Secret")
+// 	expectedSecret := os.Getenv("SYNC_SECRET")
+
+// 	if secret == "" || secret != expectedSecret {
+// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Invalid secret key"})
+// 		return
+// 	}
+
+// 	// 2. Bind JSON ke Entity User
+// 	var u entity.User
+// 	if err := c.ShouldBindJSON(&u); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Format data tidak valid", "details": err.Error()})
+// 		return
+// 	}
+
+// 	// 3. Eksekusi RegisterUser (Otomatis Hashing & Create Point)
+// 	if err := h.uc.RegisterUser(&u); err != nil {
+// 		errStr := strings.ToLower(err.Error())
+// 		// Jika sudah ada, kita beri respon khusus supaya GAS bisa lanjut tanpa dianggap error fatal
+// 		if strings.Contains(errStr, "exists") {
+// 			c.JSON(http.StatusConflict, gin.H{"message": "User skipped (already exists)", "id": u.UserID})
+// 			return
+// 		}
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal simpan ke DB", "details": err.Error()})
+// 		return
+// 	}
+
+//		c.JSON(http.StatusOK, gin.H{"status": "success", "user_id": u.UserID})
+//	}
 func (h *UserHandler) SyncPush(c *gin.Context) {
-	// 1. Validasi Secret Key dari Header
+	// 1. Validasi Secret Key
 	secret := c.GetHeader("X-Sync-Secret")
 	expectedSecret := os.Getenv("SYNC_SECRET")
-
 	if secret == "" || secret != expectedSecret {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Invalid secret key"})
 		return
 	}
 
-	// 2. Bind JSON ke Entity User
+	// 2. Bind JSON
 	var u entity.User
 	if err := c.ShouldBindJSON(&u); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Format data tidak valid", "details": err.Error()})
 		return
 	}
 
-	// 3. Eksekusi RegisterUser (Otomatis Hashing & Create Point)
-	if err := h.uc.RegisterUser(&u); err != nil {
-		errStr := strings.ToLower(err.Error())
-		// Jika sudah ada, kita beri respon khusus supaya GAS bisa lanjut tanpa dianggap error fatal
-		if strings.Contains(errStr, "exists") {
-			c.JSON(http.StatusConflict, gin.H{"message": "User skipped (already exists)", "id": u.UserID})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal simpan ke DB", "details": err.Error()})
+	// 3. FULL VALIDATION & SANITASI (Sesuai fungsi Create kamu)
+	u.Email = strings.TrimSpace(strings.ToLower(u.Email))
+	u.Name = strings.TrimSpace(u.Name)
+
+	if u.Email == "" || u.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nama dan Email wajib ada untuk sinkronisasi"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "success", "user_id": u.UserID})
+	// Validasi Format Email
+	if _, err := mail.ParseAddress(u.Email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Format email tidak valid"})
+		return
+	}
+
+	// Validasi Password (Hanya jika user baru/kosong)
+	if u.Password == "" {
+		u.Password = "12345678" // Default password untuk sinkronisasi awal
+	}
+	if len(u.Password) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password minimal 6 karakter"})
+		return
+	}
+
+	// 4. Panggil Usecase untuk logic Upsert (Update or Insert)
+	// Kita lempar ke Usecase supaya tidak ada error 'h.db undefined'
+	status, err := h.uc.SyncUpsert(&u)
+	if err != nil {
+		errStr := strings.ToLower(err.Error())
+		// Handle error spesifik jika diperlukan
+		if strings.Contains(errStr, "conflict") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Data conflict", "details": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal sinkronisasi ke DB", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  status,
+		"user_id": u.UserID,
+		"msg":     fmt.Sprintf("User %s berhasil di-%s", u.UserID, status),
+	})
+}
+func (h *UserHandler) SyncClean(c *gin.Context) {
+	// 1. Validasi Secret Key
+	secret := c.GetHeader("X-Sync-Secret")
+	expectedSecret := os.Getenv("SYNC_SECRET")
+	if secret == "" || secret != expectedSecret {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Invalid secret key"})
+		return
+	}
+
+	// 2. Bind JSON body (berisi list active_ids)
+	var req struct {
+		ActiveIDs []string `json:"active_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Format data tidak valid", "details": err.Error()})
+		return
+	}
+
+	// 3. Eksekusi ke Usecase
+	deletedCount, err := h.uc.SyncClean(req.ActiveIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membersihkan data", "details": err.Error()})
+		return
+	}
+
+	// 4. Response
+	c.JSON(http.StatusOK, gin.H{
+		"status":        "completed",
+		"deleted_count": deletedCount,
+		"message":       fmt.Sprintf("Berhasil menghapus %d user yang tidak aktif di spreadsheet", deletedCount),
+	})
 }

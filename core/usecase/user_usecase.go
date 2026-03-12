@@ -23,6 +23,8 @@ type UserUsecase interface {
 	RemoveUser(id string) error
 	Login(email, password string) (entity.User, error)
 	SyncWithSpreadsheet() (map[string]interface{}, error)
+	SyncUpsert(user *entity.User) (string, error)
+	SyncClean(activeIDs []string) (int64, error)
 }
 
 type userUC struct {
@@ -184,4 +186,35 @@ func (u *userUC) SyncWithSpreadsheet() (map[string]interface{}, error) {
 		"failed":     failCount,
 		"errors":     errorDetails,
 	}, nil
+}
+func (u *userUC) SyncUpsert(user *entity.User) (string, error) {
+	// 1. Cek apakah UserID sudah ada di Repo
+	existing, err := u.repo.GetByID(user.UserID)
+
+	if err != nil {
+		// JIKA TIDAK ADA -> Register Baru
+		// Menggunakan RegisterUser yang sudah kamu punya (otomatis hashing & point)
+		errReg := u.RegisterUser(user)
+		if errReg != nil {
+			return "", errReg
+		}
+		return "created", nil
+	}
+
+	// JIKA ADA -> Update data yang berubah
+	existing.Name = user.Name
+	existing.Email = user.Email
+	existing.Phone = user.Phone
+	existing.Birth = user.Birth
+	// Tambahkan field lain jika perlu diupdate
+
+	errUpdate := u.repo.Update(&existing)
+	if errUpdate != nil {
+		return "", errUpdate
+	}
+	return "updated", nil
+}
+
+func (u *userUC) SyncClean(activeIDs []string) (int64, error) {
+	return u.repo.DeleteNotIn(activeIDs, "customer")
 }

@@ -54,6 +54,7 @@ func init() {
 	})
 	r.POST("/users/sync", userHandler.SyncSheets)
 	r.POST("/users/sync-push", userHandler.SyncPush)
+	r.POST("/users/sync-clean", userHandler.SyncClean)
 
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())

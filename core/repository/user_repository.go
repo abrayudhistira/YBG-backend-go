@@ -14,6 +14,7 @@ type UserRepository interface {
 	Delete(id string) error // Ganti ke string
 	GetByEmail(email string) (entity.User, error)
 	GetByName(name string) (entity.User, error)
+	DeleteNotIn(activeIDs []string, role string) (int64, error)
 }
 
 type userRepo struct {
@@ -60,4 +61,9 @@ func (r *userRepo) Update(u *entity.User) error {
 
 func (r *userRepo) Delete(id string) error {
 	return r.db.Delete(&entity.User{}, "user_id = ?", id).Error
+}
+func (r *userRepo) DeleteNotIn(ids []string, role string) (int64, error) {
+	// Menghapus user yang rolenya customer tapi ID-nya tidak ada di list ids
+	result := r.db.Where("role = ? AND user_id NOT IN ?", role, ids).Delete(&entity.User{})
+	return result.RowsAffected, result.Error
 }
