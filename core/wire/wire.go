@@ -80,3 +80,15 @@ func InitializePointHandler(db *gorm.DB) *http.PointHandler {
 	wire.Build(pointSet)
 	return nil
 }
+func InitializeUserUsecase(db *gorm.DB) usecase.UserUsecase {
+	wire.Build(
+		repository.NewUserRepository,
+		repository.NewPointRepository,
+		usecase.NewUserUsecase,
+	)
+	return nil
+}
+
+func NewUserHandler(uc usecase.UserUsecase) *http.UserHandler {
+	return http.NewUserHandler(uc)
+}

@@ -5,9 +5,11 @@ import (
 	"os"
 
 	"ybg-backend-go/core/delivery/http/middleware"
-	"ybg-backend-go/core/wire" // Pastikan import path ini benar
+	"ybg-backend-go/core/wire"
+	"ybg-backend-go/pkg/telegram" // Pastikan folder telegram kamu di-import
 
 	"github.com/gin-gonic/gin"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -16,8 +18,10 @@ import (
 var router *gin.Engine
 
 func init() {
+	// 1. Load ENV (Lokal)
 	_ = godotenv.Load()
 
+	// 2. Koneksi Database
 	dsn := os.Getenv("DB_URL")
 	db, err := gorm.Open(postgres.New(postgres.Config{
 		DSN:                  dsn,
@@ -29,37 +33,67 @@ func init() {
 		return
 	}
 
-	// Seed Admin jika diperlukan
-	// repository.SeedAdmin(db)
+	// 3. Ambil Token Bot dari Environment
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 
-	// Panggil Injector dari Wire
-	userHandler := wire.InitializeUserHandler(db)
+	// 4. Inisialisasi Usecase & Handler via Wire
+	// Kita inisialisasi userUC secara mandiri agar bisa dipakai Bot & Handler
+	userUC := wire.InitializeUserUsecaseManual(db)
+	userHandler := wire.NewUserHandlerManual(userUC)
+
+	// Inisialisasi Handler Lainnya
 	productHandler := wire.InitializeProductHandler(db)
 	newsHandler := wire.InitializeNewsHandler(db)
 	brandHandler := wire.InitializeBrandHandler(db)
 	categoryHandler := wire.InitializeCategoryHandler(db)
 	pHandler := wire.InitializePointHandler(db)
 
+	// 5. Inisialisasi Bot Service (Webhook Mode)
+	botSvc := telegram.NewBotService(token, userUC)
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
-	// --- Routes Setup ---
+	// --- PUBLIC ROUTES ---
 	r.GET("/", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/health")
 	})
-	r.POST("/register", userHandler.Create)
-	r.POST("/login", userHandler.Login)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "UP", "database": "connected"})
 	})
+
+	// Route Auth Publik
+	r.POST("/register", userHandler.Create)
+	r.POST("/login", userHandler.Login)
+	r.POST("/reset-password", userHandler.ResetPassword)
+
+	// --- TELEGRAM WEBHOOK ROUTE ---
+	r.POST("/telegram-webhook", func(c *gin.Context) {
+		var update tgbotapi.Update
+		if err := c.ShouldBindJSON(&update); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+			return
+		}
+		// Bot memproses pesan yang masuk
+		botSvc.HandleUpdate(update)
+		c.Status(http.StatusOK)
+	})
+
+	// --- SYNC ROUTES (Biasanya butuh secret key) ---
 	r.POST("/users/sync", userHandler.SyncSheets)
 	r.POST("/users/sync-push", userHandler.SyncPush)
 	r.POST("/users/sync-clean", userHandler.SyncClean)
 
+	// --- PRIVATE API ROUTES (Auth Middleware) ---
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	{
-		// Groups & Handlers
+		// Profile
+		api.GET("/profile/:id", userHandler.GetByID)
+		api.PUT("/profile/:id", userHandler.Update)
+		api.GET("/users", middleware.RoleMiddleware("admin"), userHandler.GetAll)
+
+		// Brand & Category
 		brandAdmin := api.Group("/brand")
 		api.GET("/brand", brandHandler.GetAll)
 		brandAdmin.Use(middleware.RoleMiddleware("admin"))
@@ -76,10 +110,10 @@ func init() {
 			categoryAdmin.DELETE("/:id", categoryHandler.Delete)
 		}
 
+		// Products
 		api.GET("/products", productHandler.GetAll)
 		api.GET("/products/:id", productHandler.GetByID)
 		api.GET("/products/search", productHandler.Search)
-
 		productAdmin := api.Group("/products")
 		productAdmin.Use(middleware.RoleMiddleware("admin"))
 		{
@@ -88,6 +122,7 @@ func init() {
 			productAdmin.DELETE("/:id", productHandler.Delete)
 		}
 
+		// Points
 		points := api.Group("/points")
 		{
 			points.GET("/history", pHandler.GetHistory)
@@ -95,6 +130,7 @@ func init() {
 			points.GET("/all", middleware.RoleMiddleware("admin"), pHandler.GetAllSummaries)
 		}
 
+		// News
 		api.GET("/news", newsHandler.GetAll)
 		newsAdmin := api.Group("/news")
 		newsAdmin.Use(middleware.RoleMiddleware("admin"))
@@ -103,10 +139,6 @@ func init() {
 			newsAdmin.PUT("/:id", newsHandler.Update)
 			newsAdmin.DELETE("/:id", newsHandler.Delete)
 		}
-
-		api.GET("/users", middleware.RoleMiddleware("admin"), userHandler.GetAll)
-		api.GET("/profile/:id", userHandler.GetByID)
-		api.PUT("/profile/:id", userHandler.Update)
 	}
 
 	router = r

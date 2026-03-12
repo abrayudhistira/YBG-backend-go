@@ -386,3 +386,21 @@ func (h *UserHandler) SyncClean(c *gin.Context) {
 		"message":       fmt.Sprintf("Berhasil menghapus %d user yang tidak aktif di spreadsheet", deletedCount),
 	})
 }
+func (h *UserHandler) ResetPassword(c *gin.Context) {
+	var req struct {
+		Token       string `json:"token" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required,min=6"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Data tidak lengkap atau password terlalu pendek"})
+		return
+	}
+
+	if err := h.uc.ResetPasswordWithToken(req.Token, req.NewPassword); err != nil {
+		c.JSON(401, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Password berhasil diperbarui, silakan login kembali"})
+}

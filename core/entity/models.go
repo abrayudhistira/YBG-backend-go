@@ -17,9 +17,12 @@ type User struct {
 	Phone          string     `gorm:"size:13" json:"phone"`
 	Gender         string     `gorm:"type:user_gender" json:"gender"`
 	// IdPoint      int            `json:"id_point"`
-	CreatedAt    time.Time      `json:"created_at"`
-	PointTotal   *PointTotal    `gorm:"foreignKey:UserID" json:"point_total"`
-	PointHistory []PointHistory `gorm:"foreignKey:UserID" json:"point_history"`
+	OTPCode        string         `gorm:"column:otp_code" json:"otp_code,omitempty"`
+	ResetToken     string         `gorm:"column:reset_token" json:"reset_token,omitempty"`
+	TokenExpiredAt *time.Time     `gorm:"column:token_expired_at" json:"token_expired_at,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	PointTotal     *PointTotal    `gorm:"foreignKey:UserID" json:"point_total"`
+	PointHistory   []PointHistory `gorm:"foreignKey:UserID" json:"point_history"`
 }
 
 func (User) TableName() string { return "users" } // Tabel Users biasanya jamak di Supabase

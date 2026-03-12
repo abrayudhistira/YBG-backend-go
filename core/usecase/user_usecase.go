@@ -25,6 +25,9 @@ type UserUsecase interface {
 	SyncWithSpreadsheet() (map[string]interface{}, error)
 	SyncUpsert(user *entity.User) (string, error)
 	SyncClean(activeIDs []string) (int64, error)
+	StoreTemporaryOTP(email, otp string) error
+	ValidateOTPAndGenerateResetToken(email, otp string) (string, error)
+	ResetPasswordWithToken(token, newPassword string) error
 }
 
 type userUC struct {
@@ -217,4 +220,68 @@ func (u *userUC) SyncUpsert(user *entity.User) (string, error) {
 
 func (u *userUC) SyncClean(activeIDs []string) (int64, error) {
 	return u.repo.DeleteNotIn(activeIDs, "customer")
+}
+
+func (u *userUC) StoreTemporaryOTP(email, otp string) error {
+	user, err := u.repo.GetByEmail(email)
+	if err != nil {
+		return errors.New("email tidak terdaftar")
+	}
+
+	user.OTPCode = otp
+	// u.repo.Update sudah kita setting Select-nya untuk mengizinkan OTPCode
+	return u.repo.Update(&user)
+}
+
+func (u *userUC) ValidateOTPAndGenerateResetToken(email, otp string) (string, error) {
+	user, err := u.repo.GetByEmail(email)
+	if err != nil {
+		return "", errors.New("user tidak ditemukan")
+	}
+
+	if user.OTPCode == "" || user.OTPCode != otp {
+		return "", errors.New("OTP salah atau sudah kadaluarsa")
+	}
+
+	resetToken := fmt.Sprintf("RST-%s-%s", user.UserID, utils.GenerateRandomID(10))
+	expiry := time.Now().Add(15 * time.Minute)
+
+	user.ResetToken = resetToken
+	user.TokenExpiredAt = &expiry
+	user.OTPCode = "" // Burn after use
+
+	errUpdate := u.repo.Update(&user)
+	if errUpdate != nil {
+		return "", errUpdate
+	}
+
+	return resetToken, nil
+}
+
+func (u *userUC) ResetPasswordWithToken(token, newPassword string) error {
+	// 1. Cari user berdasarkan ResetToken via Repo
+	user, err := u.repo.GetByResetToken(token)
+	if err != nil {
+		return errors.New("token tidak valid atau tidak ditemukan")
+	}
+
+	// 2. Cek Expiry (menggunakan pointer check)
+	if user.TokenExpiredAt == nil || time.Now().After(*user.TokenExpiredAt) {
+		return errors.New("sesi reset password sudah habis, silakan ulangi dari Telegram")
+	}
+
+	// 3. Hash Password Baru
+	hashed, err := utils.HashPassword(newPassword)
+	if err != nil {
+		return errors.New("gagal memproses password baru")
+	}
+
+	// 4. Update via Repo (Menggunakan fungsi UpdatePassword yang sudah kamu buat di repo)
+	// Fungsi ini otomatis membersihkan Token, OTP, dan ExpiredAt
+	err = u.repo.UpdatePassword(user.UserID, hashed)
+	if err != nil {
+		return errors.New("gagal mengupdate password di database")
+	}
+
+	return nil
 }
